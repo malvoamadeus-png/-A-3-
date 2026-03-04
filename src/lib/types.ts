@@ -21,3 +21,18 @@ export type SectorResearch = {
   upstream_downstream_rotation: string;
   created_at?: string | null;
 };
+
+export type MomentumDirection = "up" | "down";
+
+export type MomentumCell = {
+  trade_date: string;
+  rank: number;
+  code: string;
+  name: string;
+  change_pct: number | null;
+};
+
+export type MomentumMatrix = {
+  dates: string[];
+  rows: Record<string, MomentumCell[]>;
+};
