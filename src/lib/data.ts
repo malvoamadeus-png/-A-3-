@@ -139,7 +139,7 @@ export async function getSectorResearch(
   };
 }
 
-export async function getMomentumData(maxDays = 14): Promise<{
+export async function getMomentumData(maxDays = 14, topN = 30): Promise<{
   up: MomentumMatrix;
   down: MomentumMatrix;
 }> {
@@ -160,6 +160,7 @@ export async function getMomentumData(maxDays = 14): Promise<{
     throw new Error(`查询动量数据失败: ${error.message}`);
   }
 
+  const safeTopN = Math.max(1, Math.min(50, topN));
   const allDates = Array.from(
     new Set((data ?? []).map((x) => String(x.trade_date)).filter(Boolean))
   ).slice(0, maxDays);
@@ -187,6 +188,7 @@ export async function getMomentumData(maxDays = 14): Promise<{
     }
     for (const d of dates) {
       rows[d].sort((a, b) => a.rank - b.rank);
+      rows[d] = rows[d].slice(0, safeTopN);
     }
     return { dates, rows };
   };

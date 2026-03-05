@@ -3,6 +3,7 @@ import type { MomentumMatrix } from "@/lib/types";
 type Props = {
   title: string;
   matrix: MomentumMatrix;
+  topN?: number;
 };
 
 function colorByName(name: string): string {
@@ -21,9 +22,9 @@ function pct(v: number | null): string {
   return `${(v * 100).toFixed(2)}%`;
 }
 
-export function MomentumHeatmap({ title, matrix }: Props) {
+export function MomentumHeatmap({ title, matrix, topN = 30 }: Props) {
   const dates = matrix.dates;
-  const ranks = Array.from({ length: 30 }, (_, i) => i + 1);
+  const ranks = Array.from({ length: topN }, (_, i) => i + 1);
 
   if (!dates.length) {
     return (
