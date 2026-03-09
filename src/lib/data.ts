@@ -1,5 +1,12 @@
 import { getSupabaseServerClient } from "@/lib/supabase";
-import type { MomentumCell, MomentumMatrix, SectorResearch, SectorRow } from "@/lib/types";
+import type {
+  Jin10NewsItem,
+  NewsBriefItem,
+  MomentumCell,
+  MomentumMatrix,
+  SectorResearch,
+  SectorRow,
+} from "@/lib/types";
 
 function getTodayInChina(): string {
   return new Intl.DateTimeFormat("en-CA", {
@@ -112,7 +119,7 @@ export async function getSectorResearch(
   const { data, error } = await supabase
     .from("sector_research_daily")
     .select(
-      "sector_code, sector_name, model_name, today_reason, historical_cases, sustainability_judgement, future_triggers, upstream_downstream_rotation, created_at"
+      "sector_code, sector_name, model_name, classification_check, today_reason, historical_cases, sustainability_judgement, future_triggers, upstream_downstream_rotation, created_at"
     )
     .eq("trade_date", tradeDate)
     .eq("sector_code", sectorCode)
@@ -130,6 +137,7 @@ export async function getSectorResearch(
     sector_code: String(data.sector_code),
     sector_name: String(data.sector_name),
     model_name: String(data.model_name),
+    classification_check: String(data.classification_check ?? ""),
     today_reason: String(data.today_reason),
     historical_cases: String(data.historical_cases),
     sustainability_judgement: String(data.sustainability_judgement),
@@ -219,4 +227,95 @@ export async function getAvailableTradeDates(limit = 60): Promise<string[]> {
     }
   }
   return uniqueDates;
+}
+
+export async function getJin10NewsRows(params?: {
+  page?: number;
+  pageSize?: number;
+  importance?: number | null;
+  startTime?: string | null;
+  endTime?: string | null;
+}): Promise<{
+  rows: Jin10NewsItem[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+}> {
+  const supabase = getSupabaseServerClient();
+  const safePageSize = Math.max(1, Math.min(100, params?.pageSize ?? 30));
+  const safePage = Math.max(1, params?.page ?? 1);
+  const from = (safePage - 1) * safePageSize;
+  const to = from + safePageSize - 1;
+
+  let query = supabase
+    .from("jin10_news")
+    .select("news_id, news_time, title, importance, created_at", { count: "exact" })
+    .order("news_time", { ascending: false, nullsFirst: false })
+    .range(from, to);
+
+  if (params?.importance !== null && params?.importance !== undefined) {
+    query = query.eq("importance", params.importance);
+  }
+  if (params?.startTime) {
+    query = query.gte("news_time", params.startTime);
+  }
+  if (params?.endTime) {
+    query = query.lte("news_time", params.endTime);
+  }
+
+  const { data, error, count } = await query;
+  if (error) {
+    throw new Error(`查询快讯失败: ${error.message}`);
+  }
+
+  const rows = (data ?? []).map((item) => ({
+    news_id: String(item.news_id),
+    news_time: item.news_time ? String(item.news_time) : null,
+    title: String(item.title ?? ""),
+    importance: Number(item.importance ?? 0),
+    created_at: item.created_at ? String(item.created_at) : null,
+  }));
+  const total = Number(count ?? 0);
+  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
+  return {
+    rows,
+    total,
+    page: safePage,
+    pageSize: safePageSize,
+    totalPages,
+  };
+}
+
+export async function getNewsBriefRows(params?: {
+  limit?: number;
+  briefType?: string | null;
+}): Promise<NewsBriefItem[]> {
+  const supabase = getSupabaseServerClient();
+  const safeLimit = Math.max(1, Math.min(100, params?.limit ?? 30));
+
+  let query = supabase
+    .from("jin10_news_brief")
+    .select("id, brief_type, period_start, period_end, importance, news_count, summary, model_name, created_at")
+    .order("period_start", { ascending: false })
+    .limit(safeLimit);
+
+  if (params?.briefType) {
+    query = query.eq("brief_type", params.briefType);
+  }
+  const { data, error } = await query;
+  if (error) {
+    throw new Error(`查询快讯简报失败: ${error.message}`);
+  }
+  return (data ?? []).map((item) => ({
+    id: Number(item.id),
+    brief_type: String(item.brief_type),
+    period_start: item.period_start ? String(item.period_start) : null,
+    period_end: item.period_end ? String(item.period_end) : null,
+    importance: Number(item.importance ?? 0),
+    news_count: Number(item.news_count ?? 0),
+    summary: String(item.summary ?? ""),
+    model_name: item.model_name ? String(item.model_name) : null,
+    created_at: item.created_at ? String(item.created_at) : null,
+  }));
 }

@@ -64,6 +64,30 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
           >
             行业板块动量图
           </Link>
+          <Link
+            href="/jin10"
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: "#fff",
+              color: "#111",
+            }}
+          >
+            快讯
+          </Link>
+          <Link
+            href="/briefs"
+            style={{
+              padding: "8px 12px",
+              borderRadius: 8,
+              border: "1px solid #ddd",
+              background: "#fff",
+              color: "#111",
+            }}
+          >
+            快讯简报
+          </Link>
         </section>
         {currentTab === "concept" ? (
           <section

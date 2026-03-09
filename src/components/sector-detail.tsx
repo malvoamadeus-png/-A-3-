@@ -78,6 +78,18 @@ function RichTextBlock({ text }: { text: string }) {
   );
 }
 
+function isClassificationSuspicious(text: string): boolean {
+  const v = text.toLowerCase();
+  return (
+    v.includes("分类存疑")
+    || v.includes("存疑")
+    || v.includes("误判")
+    || v.includes("false")
+    || v.includes("不准确")
+    || v.includes("错配")
+  );
+}
+
 export function SectorDetail({ loading = false, error = null, detail = null }: Props) {
   if (loading) {
     return <div style={{ padding: "12px 16px" }}>加载分析中...</div>;
@@ -93,8 +105,26 @@ export function SectorDetail({ loading = false, error = null, detail = null }: P
     return <div style={{ padding: "12px 16px", color: "#666" }}>暂无调研结果</div>;
   }
 
+  const classificationText = detail.classification_check || "未提供";
+  const suspicious = isClassificationSuspicious(classificationText);
+
   return (
     <div style={{ padding: "12px 16px", display: "grid", gap: 10, background: "#fafafa" }}>
+      <section
+        style={
+          suspicious
+            ? {
+                border: "1px solid #f59e0b",
+                background: "#fff7ed",
+                borderRadius: 8,
+                padding: "8px 10px",
+              }
+            : undefined
+        }
+      >
+        <strong>分类准确性判断</strong>
+        <RichTextBlock text={classificationText} />
+      </section>
       <section>
         <strong>今日上涨原因</strong>
         <RichTextBlock text={detail.today_reason} />
