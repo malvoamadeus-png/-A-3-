@@ -296,7 +296,7 @@ export async function getNewsBriefRows(params?: {
 
   let query = supabase
     .from("jin10_news_brief")
-    .select("id, brief_type, period_start, period_end, importance, news_count, summary, model_name, created_at")
+    .select("id, brief_type, period_start, period_end, importance, news_count, summary, model_name, phase2_events, created_at")
     .order("period_start", { ascending: false })
     .limit(safeLimit);
 
@@ -316,6 +316,7 @@ export async function getNewsBriefRows(params?: {
     news_count: Number(item.news_count ?? 0),
     summary: String(item.summary ?? ""),
     model_name: item.model_name ? String(item.model_name) : null,
+    phase2_events: item.phase2_events ? String(item.phase2_events) : null,
     created_at: item.created_at ? String(item.created_at) : null,
   }));
 }

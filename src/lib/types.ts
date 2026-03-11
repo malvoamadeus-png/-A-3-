@@ -55,5 +55,6 @@ export type NewsBriefItem = {
   news_count: number;
   summary: string;
   model_name: string | null;
+  phase2_events: string | null;
   created_at: string | null;
 };
