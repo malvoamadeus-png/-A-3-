@@ -1,4 +1,5 @@
 import { getNewsBriefRows } from "@/lib/data";
+import BriefSummary from "./brief-summary";
 
 type SearchParams = Promise<{
   type?: string;
@@ -89,9 +90,7 @@ export default async function BriefsPage({ searchParams }: { searchParams: Searc
                     窗口：{formatDisplayTime(row.period_start)} ~ {formatDisplayTime(row.period_end)}
                   </span>
                 </div>
-                <div style={{ color: "#333", lineHeight: 1.8, whiteSpace: "pre-wrap" }}>
-                  {row.summary}
-                </div>
+                <BriefSummary summary={row.summary} />
                 <div style={{ color: "#777", marginTop: 8, fontSize: 12 }}>
                   样本数：{row.news_count} | 模型：{row.model_name ?? "-"} | 生成时间：{formatDisplayTime(row.created_at)}
                 </div>
