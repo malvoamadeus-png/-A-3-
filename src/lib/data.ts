@@ -8,6 +8,7 @@ import type {
   V2EventCenterData,
   V2EventStreamItem,
   V2HypothesisStreamItem,
+  V2StockMappingItem,
   V2WatchRunItem,
   V2WatchTaskItem,
 } from "@/lib/types";
@@ -300,12 +301,14 @@ export async function getV2EventCenterData(params?: {
   const [eventResp, hypoResp, taskResp, runResp] = await Promise.all([
     supabase
       .from("event_cards")
-      .select("event_id, created_at, event_title, event_status, lifecycle_stage, theme_key, theme_delta, theme_state_snapshot")
+      .select(
+        "event_id, created_at, event_title, event_summary, event_status, rejection_reason, lifecycle_stage, theme_key, theme_delta, delta_reason, theme_state_snapshot"
+      )
       .order("created_at", { ascending: false })
       .limit(safeLimit),
     supabase
       .from("hypothesis_cards")
-      .select("hypothesis_id, event_id, created_at, hypothesis_title, thesis_type, tradeability_level")
+      .select("hypothesis_id, event_id, created_at, hypothesis_title, thesis_summary, thesis_type, tradeability_level")
       .order("created_at", { ascending: false })
       .limit(safeLimit),
     supabase
@@ -333,14 +336,36 @@ export async function getV2EventCenterData(params?: {
     throw new Error(`查询 watch_task_runs 失败: ${runResp.error.message}`);
   }
 
+  const hypothesisIds = (hypoResp.data ?? [])
+    .map((item) => (item.hypothesis_id ? String(item.hypothesis_id) : ""))
+    .filter(Boolean);
+  let mappingRows: Array<Record<string, unknown>> = [];
+  if (hypothesisIds.length > 0) {
+    const mappingResp = await supabase
+      .from("stock_role_mappings")
+      .select(
+        "mapping_id, event_id, hypothesis_id, stock_code, stock_name, role_type, priority_rank, mapping_confidence, role_reason, selection_basis, watch_metrics, created_at"
+      )
+      .in("hypothesis_id", hypothesisIds)
+      .order("created_at", { ascending: false })
+      .limit(safeLimit * 6);
+    if (mappingResp.error) {
+      throw new Error(`查询 stock_role_mappings 失败: ${mappingResp.error.message}`);
+    }
+    mappingRows = mappingResp.data ?? [];
+  }
+
   const events: V2EventStreamItem[] = (eventResp.data ?? []).map((item) => ({
     event_id: String(item.event_id),
     created_at: item.created_at ? String(item.created_at) : null,
     event_title: String(item.event_title ?? ""),
+    event_summary: String(item.event_summary ?? ""),
     event_status: String(item.event_status ?? ""),
+    rejection_reason: item.rejection_reason ? String(item.rejection_reason) : null,
     lifecycle_stage: String(item.lifecycle_stage ?? ""),
     theme_key: item.theme_key ? String(item.theme_key) : null,
     theme_delta: item.theme_delta ? String(item.theme_delta) : null,
+    delta_reason: item.delta_reason ? String(item.delta_reason) : null,
     theme_state_snapshot:
       item.theme_state_snapshot && typeof item.theme_state_snapshot === "object"
         ? (item.theme_state_snapshot as Record<string, unknown>)
@@ -352,8 +377,27 @@ export async function getV2EventCenterData(params?: {
     event_id: String(item.event_id),
     created_at: item.created_at ? String(item.created_at) : null,
     hypothesis_title: String(item.hypothesis_title ?? ""),
+    thesis_summary: String(item.thesis_summary ?? ""),
     thesis_type: String(item.thesis_type ?? ""),
     tradeability_level: String(item.tradeability_level ?? ""),
+  }));
+
+  const mappings: V2StockMappingItem[] = mappingRows.map((item) => ({
+    mapping_id: String(item.mapping_id ?? ""),
+    event_id: String(item.event_id ?? ""),
+    hypothesis_id: String(item.hypothesis_id ?? ""),
+    stock_code: String(item.stock_code ?? ""),
+    stock_name: String(item.stock_name ?? ""),
+    role_type: String(item.role_type ?? ""),
+    priority_rank: Number(item.priority_rank ?? 999),
+    mapping_confidence: String(item.mapping_confidence ?? ""),
+    role_reason: String(item.role_reason ?? ""),
+    selection_basis: String(item.selection_basis ?? ""),
+    watch_metrics: Array.isArray(item.watch_metrics)
+      ? item.watch_metrics
+          .map((x) => String(x ?? "").trim())
+          .filter((x) => x.length > 0)
+      : [],
   }));
 
   const tasks: V2WatchTaskItem[] = (taskResp.data ?? []).map((item) => ({
@@ -377,5 +421,5 @@ export async function getV2EventCenterData(params?: {
     diff_summary: item.diff_summary ? String(item.diff_summary) : null,
   }));
 
-  return { events, hypotheses, tasks, runs };
+  return { events, hypotheses, mappings, tasks, runs };
 }

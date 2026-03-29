@@ -63,10 +63,13 @@ export type V2EventStreamItem = {
   event_id: string;
   created_at: string | null;
   event_title: string;
+  event_summary: string;
   event_status: string;
+  rejection_reason: string | null;
   lifecycle_stage: string;
   theme_key: string | null;
   theme_delta: string | null;
+  delta_reason: string | null;
   theme_state_snapshot: Record<string, unknown> | null;
 };
 
@@ -75,8 +78,23 @@ export type V2HypothesisStreamItem = {
   event_id: string;
   created_at: string | null;
   hypothesis_title: string;
+  thesis_summary: string;
   thesis_type: string;
   tradeability_level: string;
+};
+
+export type V2StockMappingItem = {
+  mapping_id: string;
+  event_id: string;
+  hypothesis_id: string;
+  stock_code: string;
+  stock_name: string;
+  role_type: string;
+  priority_rank: number;
+  mapping_confidence: string;
+  role_reason: string;
+  selection_basis: string;
+  watch_metrics: string[];
 };
 
 export type V2WatchTaskItem = {
@@ -103,6 +121,7 @@ export type V2WatchRunItem = {
 export type V2EventCenterData = {
   events: V2EventStreamItem[];
   hypotheses: V2HypothesisStreamItem[];
+  mappings: V2StockMappingItem[];
   tasks: V2WatchTaskItem[];
   runs: V2WatchRunItem[];
 };
