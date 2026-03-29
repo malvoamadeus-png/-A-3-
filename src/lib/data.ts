@@ -1,11 +1,15 @@
 import { getSupabaseServerClient } from "@/lib/supabase";
 import type {
   Jin10NewsItem,
-  NewsBriefItem,
   MomentumCell,
   MomentumMatrix,
   SectorResearch,
   SectorRow,
+  V2EventCenterData,
+  V2EventStreamItem,
+  V2HypothesisStreamItem,
+  V2WatchRunItem,
+  V2WatchTaskItem,
 } from "@/lib/types";
 
 function getTodayInChina(): string {
@@ -287,36 +291,91 @@ export async function getJin10NewsRows(params?: {
   };
 }
 
-export async function getNewsBriefRows(params?: {
+export async function getV2EventCenterData(params?: {
   limit?: number;
-  briefType?: string | null;
-}): Promise<NewsBriefItem[]> {
+}): Promise<V2EventCenterData> {
   const supabase = getSupabaseServerClient();
-  const safeLimit = Math.max(1, Math.min(100, params?.limit ?? 30));
+  const safeLimit = Math.max(1, Math.min(100, params?.limit ?? 20));
 
-  let query = supabase
-    .from("jin10_news_brief")
-    .select("id, brief_type, period_start, period_end, importance, news_count, summary, model_name, phase2_events, created_at")
-    .order("period_start", { ascending: false })
-    .limit(safeLimit);
+  const [eventResp, hypoResp, taskResp, runResp] = await Promise.all([
+    supabase
+      .from("event_cards")
+      .select("event_id, created_at, event_title, event_status, lifecycle_stage, theme_key, theme_delta, theme_state_snapshot")
+      .order("created_at", { ascending: false })
+      .limit(safeLimit),
+    supabase
+      .from("hypothesis_cards")
+      .select("hypothesis_id, event_id, created_at, hypothesis_title, thesis_type, tradeability_level")
+      .order("created_at", { ascending: false })
+      .limit(safeLimit),
+    supabase
+      .from("watch_tasks")
+      .select("task_id, event_id, hypothesis_id, task_type, task_subject, priority_level, task_status, last_checked_at, next_run_at")
+      .order("updated_at", { ascending: false })
+      .limit(safeLimit),
+    supabase
+      .from("watch_task_runs")
+      .select("id, task_id, run_started_at, run_status, triggered_update, diff_summary")
+      .order("run_started_at", { ascending: false })
+      .limit(safeLimit),
+  ]);
 
-  if (params?.briefType) {
-    query = query.eq("brief_type", params.briefType);
+  if (eventResp.error) {
+    throw new Error(`查询 event_cards 失败: ${eventResp.error.message}`);
   }
-  const { data, error } = await query;
-  if (error) {
-    throw new Error(`查询快讯简报失败: ${error.message}`);
+  if (hypoResp.error) {
+    throw new Error(`查询 hypothesis_cards 失败: ${hypoResp.error.message}`);
   }
-  return (data ?? []).map((item) => ({
-    id: Number(item.id),
-    brief_type: String(item.brief_type),
-    period_start: item.period_start ? String(item.period_start) : null,
-    period_end: item.period_end ? String(item.period_end) : null,
-    importance: Number(item.importance ?? 0),
-    news_count: Number(item.news_count ?? 0),
-    summary: String(item.summary ?? ""),
-    model_name: item.model_name ? String(item.model_name) : null,
-    phase2_events: item.phase2_events ? String(item.phase2_events) : null,
+  if (taskResp.error) {
+    throw new Error(`查询 watch_tasks 失败: ${taskResp.error.message}`);
+  }
+  if (runResp.error) {
+    throw new Error(`查询 watch_task_runs 失败: ${runResp.error.message}`);
+  }
+
+  const events: V2EventStreamItem[] = (eventResp.data ?? []).map((item) => ({
+    event_id: String(item.event_id),
     created_at: item.created_at ? String(item.created_at) : null,
+    event_title: String(item.event_title ?? ""),
+    event_status: String(item.event_status ?? ""),
+    lifecycle_stage: String(item.lifecycle_stage ?? ""),
+    theme_key: item.theme_key ? String(item.theme_key) : null,
+    theme_delta: item.theme_delta ? String(item.theme_delta) : null,
+    theme_state_snapshot:
+      item.theme_state_snapshot && typeof item.theme_state_snapshot === "object"
+        ? (item.theme_state_snapshot as Record<string, unknown>)
+        : null,
   }));
+
+  const hypotheses: V2HypothesisStreamItem[] = (hypoResp.data ?? []).map((item) => ({
+    hypothesis_id: String(item.hypothesis_id),
+    event_id: String(item.event_id),
+    created_at: item.created_at ? String(item.created_at) : null,
+    hypothesis_title: String(item.hypothesis_title ?? ""),
+    thesis_type: String(item.thesis_type ?? ""),
+    tradeability_level: String(item.tradeability_level ?? ""),
+  }));
+
+  const tasks: V2WatchTaskItem[] = (taskResp.data ?? []).map((item) => ({
+    task_id: String(item.task_id),
+    event_id: String(item.event_id),
+    hypothesis_id: String(item.hypothesis_id),
+    task_type: String(item.task_type ?? ""),
+    task_subject: String(item.task_subject ?? ""),
+    priority_level: String(item.priority_level ?? ""),
+    task_status: String(item.task_status ?? ""),
+    last_checked_at: item.last_checked_at ? String(item.last_checked_at) : null,
+    next_run_at: item.next_run_at ? String(item.next_run_at) : null,
+  }));
+
+  const runs: V2WatchRunItem[] = (runResp.data ?? []).map((item) => ({
+    id: Number(item.id),
+    task_id: String(item.task_id),
+    run_started_at: item.run_started_at ? String(item.run_started_at) : null,
+    run_status: String(item.run_status ?? ""),
+    triggered_update: Boolean(item.triggered_update),
+    diff_summary: item.diff_summary ? String(item.diff_summary) : null,
+  }));
+
+  return { events, hypotheses, tasks, runs };
 }

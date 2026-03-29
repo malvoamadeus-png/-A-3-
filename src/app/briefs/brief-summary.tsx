@@ -33,10 +33,18 @@ const mdComponents: Components = {
 };
 
 export default function BriefSummary({ summary }: { summary: string }) {
-  // 把【狙击名单】【避雷名单】【无效剔除区】提升为 markdown h2
   const formatted = summary
+    // 处理 HTML 实体转义的 <br> 和原始 <br>
+    .replace(/&lt;br\s*\/?&gt;/gi, "\n\n")
+    .replace(/<br\s*\/?>/gi, "\n\n")
+    // 五要素标题行 → h2
+    .replace(/^(分类准确性判断|今日上涨原因|明日操作建议|板块生命周期判断|核心驱动力分析)\s*$/gm, "\n## $1\n")
+    // 【狙击名单】【避雷名单】【无效剔除区】→ h2
     .replace(/^【(.+?)】\s*$/gm, "\n## 【$1】\n")
-    .replace(/^(触发事件|硬逻辑|代表标的|风险源|杀跌逻辑|剔除理由)：/gm, "**$1：**");
+    // ✦ 开头的行 → h3
+    .replace(/^✦\s*(.+)$/gm, "### ✦ $1")
+    // 字段标签加粗
+    .replace(/^(触发事件|硬逻辑|代表标的|风险源|杀跌逻辑|剔除理由|结论|交叉验证|关键事实)：/gm, "**$1：**");
 
   return (
     <div style={{ color: "#333", lineHeight: 1.8 }}>

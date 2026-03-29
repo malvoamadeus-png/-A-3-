@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "板块调研看板",
-  description: "展示板块调研、快讯与快讯简报",
+  description: "展示板块调研、快讯与V2事件中心",
 };
 
 export default function RootLayout({
@@ -42,7 +42,7 @@ export default function RootLayout({
             快讯
           </Link>
           <Link href="/briefs" style={{ color: "#2563eb", fontWeight: 600 }}>
-            快讯简报
+            V2事件中心
           </Link>
         </header>
         {children}

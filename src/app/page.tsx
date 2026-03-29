@@ -86,7 +86,7 @@ export default async function Home({ searchParams }: { searchParams: SearchParam
               color: "#111",
             }}
           >
-            快讯简报
+            V2事件中心
           </Link>
         </section>
         {currentTab === "concept" ? (

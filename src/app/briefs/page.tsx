@@ -1,103 +1,165 @@
-import { getNewsBriefRows } from "@/lib/data";
-import BriefSummary from "./brief-summary";
-
-type SearchParams = Promise<{
-  type?: string;
-}>;
-
-const WINDOW_LABELS: Record<string, string> = {
-  pre_market_08: "盘前狙击 (08:00)",
-  midday_12: "午间复盘 (12:00)",
-  post_market_17: "盘后沉淀 (17:00)",
-  evening_21: "夜盘前瞻 (21:00)",
-  midnight_24: "深夜哨兵 (24:00)",
-  // 兼容旧数据
-  important_hourly: "重要（每小时·旧）",
-  normal_3hourly: "普通（每3小时·旧）",
-};
-
-const VALID_TYPES = new Set([
-  "pre_market_08",
-  "midday_12",
-  "post_market_17",
-  "evening_21",
-  "midnight_24",
-]);
+import { getV2EventCenterData } from "@/lib/data";
 
 function formatDisplayTime(raw: string | null): string {
   if (!raw) return "-";
   return raw.replace("T", " ").slice(0, 19);
 }
 
-function getBriefLabel(briefType: string): string {
-  return WINDOW_LABELS[briefType] ?? briefType;
+function prettyThemeState(raw: Record<string, unknown> | null): string {
+  if (!raw) return "-";
+  const state = raw.state ? String(raw.state) : "-";
+  const score = raw.score === undefined || raw.score === null ? "-" : String(raw.score);
+  const delta = raw.delta ? String(raw.delta) : "-";
+  return `${state} / score=${score} / delta=${delta}`;
 }
 
-export default async function BriefsPage({ searchParams }: { searchParams: SearchParams }) {
-  const params = await searchParams;
-  const briefTypeRaw = (params.type ?? "all").trim();
-  const briefType = VALID_TYPES.has(briefTypeRaw) ? briefTypeRaw : null;
-  const rows = await getNewsBriefRows({ limit: 30, briefType });
+export default async function BriefsPage() {
+  const data = await getV2EventCenterData({ limit: 20 });
 
   return (
-    <div style={{ padding: "24px", maxWidth: 1200, margin: "0 auto" }}>
+    <div style={{ padding: "24px", maxWidth: 1280, margin: "0 auto" }}>
       <main style={{ display: "grid", gap: 16 }}>
         <section style={{ display: "flex", justifyContent: "space-between", alignItems: "end" }}>
           <div>
-            <h1 style={{ fontSize: 28 }}>快讯简报</h1>
-            <p style={{ color: "#666", marginTop: 6 }}>每日5个定点窗口生成A股事件研判简报</p>
+            <h1 style={{ fontSize: 28 }}>V2 事件中心</h1>
+            <p style={{ color: "#666", marginTop: 6 }}>
+              事件、假设、长期任务与执行记录的一体化视图（最近20条）
+            </p>
           </div>
-          <p style={{ color: "#666" }}>最近 {rows.length} 条</p>
+          <p style={{ color: "#666" }}>
+            事件 {data.events.length} / 假设 {data.hypotheses.length} / 任务 {data.tasks.length} / 执行 {data.runs.length}
+          </p>
         </section>
 
-        <section
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 8,
-            border: "1px solid #eee",
-            borderRadius: 8,
-            padding: 10,
-          }}
-        >
-          <form action="/briefs" method="get" style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <label htmlFor="type" style={{ fontSize: 14 }}>
-              窗口类型：
-            </label>
-            <select id="type" name="type" defaultValue={briefTypeRaw} style={{ padding: "4px 8px" }}>
-              <option value="all">全部</option>
-              <option value="pre_market_08">盘前狙击 (08:00)</option>
-              <option value="midday_12">午间复盘 (12:00)</option>
-              <option value="post_market_17">盘后沉淀 (17:00)</option>
-              <option value="evening_21">夜盘前瞻 (21:00)</option>
-              <option value="midnight_24">深夜哨兵 (24:00)</option>
-            </select>
-            <button type="submit" style={{ padding: "4px 10px", cursor: "pointer" }}>
-              筛选
-            </button>
-          </form>
+        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 8 }}>事件流（event_cards）</h2>
+          {data.events.length === 0 ? (
+            <div style={{ color: "#666" }}>暂无事件数据。</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f3f4f6" }}>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>时间</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>状态</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>生命周期</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>主题键</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>主题快照</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>标题</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.events.map((row) => (
+                    <tr key={row.event_id} style={{ borderTop: "1px solid #eee" }}>
+                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{formatDisplayTime(row.created_at)}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.event_status}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.lifecycle_stage}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.theme_key ?? "-"}</td>
+                      <td style={{ padding: "8px 10px" }}>{prettyThemeState(row.theme_state_snapshot)}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.event_title}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
-        {rows.length === 0 ? (
-          <div style={{ color: "#666" }}>暂无简报数据，请先运行采集程序。</div>
-        ) : (
-          <div style={{ display: "grid", gap: 10 }}>
-            {rows.map((row) => (
-              <article key={row.id} style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, marginBottom: 8 }}>
-                  <strong>{getBriefLabel(row.brief_type)}</strong>
-                  <span style={{ color: "#666", fontSize: 13 }}>
-                    窗口：{formatDisplayTime(row.period_start)} ~ {formatDisplayTime(row.period_end)}
-                  </span>
-                </div>
-                <BriefSummary summary={row.summary} />
-                <div style={{ color: "#777", marginTop: 8, fontSize: 12 }}>
-                  样本数：{row.news_count} | 模型：{row.model_name ?? "-"} | 生成时间：{formatDisplayTime(row.created_at)}
-                </div>
-              </article>
-            ))}
-          </div>
-        )}
+        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 8 }}>假设流（hypothesis_cards）</h2>
+          {data.hypotheses.length === 0 ? (
+            <div style={{ color: "#666" }}>暂无假设数据。</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f3f4f6" }}>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>时间</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>thesis_type</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>tradeability</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>标题</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.hypotheses.map((row) => (
+                    <tr key={row.hypothesis_id} style={{ borderTop: "1px solid #eee" }}>
+                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{formatDisplayTime(row.created_at)}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.thesis_type}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.tradeability_level}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.hypothesis_title}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 8 }}>任务流（watch_tasks）</h2>
+          {data.tasks.length === 0 ? (
+            <div style={{ color: "#666" }}>暂无任务数据。</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f3f4f6" }}>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>任务类型</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>主题</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>优先级</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>状态</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>最近检查</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>下次执行</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.tasks.map((row) => (
+                    <tr key={row.task_id} style={{ borderTop: "1px solid #eee" }}>
+                      <td style={{ padding: "8px 10px" }}>{row.task_type}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.task_subject}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.priority_level}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.task_status}</td>
+                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{formatDisplayTime(row.last_checked_at)}</td>
+                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{formatDisplayTime(row.next_run_at)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 8 }}>执行流（watch_task_runs）</h2>
+          {data.runs.length === 0 ? (
+            <div style={{ color: "#666" }}>暂无执行记录。</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f3f4f6" }}>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>时间</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>task_id</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>run_status</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>triggered</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>diff_summary</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.runs.map((row) => (
+                    <tr key={`${row.id}-${row.task_id}`} style={{ borderTop: "1px solid #eee" }}>
+                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{formatDisplayTime(row.run_started_at)}</td>
+                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{row.task_id}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.run_status}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.triggered_update ? "true" : "false"}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.diff_summary ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
       </main>
     </div>
   );

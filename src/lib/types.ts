@@ -58,3 +58,51 @@ export type NewsBriefItem = {
   phase2_events: string | null;
   created_at: string | null;
 };
+
+export type V2EventStreamItem = {
+  event_id: string;
+  created_at: string | null;
+  event_title: string;
+  event_status: string;
+  lifecycle_stage: string;
+  theme_key: string | null;
+  theme_delta: string | null;
+  theme_state_snapshot: Record<string, unknown> | null;
+};
+
+export type V2HypothesisStreamItem = {
+  hypothesis_id: string;
+  event_id: string;
+  created_at: string | null;
+  hypothesis_title: string;
+  thesis_type: string;
+  tradeability_level: string;
+};
+
+export type V2WatchTaskItem = {
+  task_id: string;
+  event_id: string;
+  hypothesis_id: string;
+  task_type: string;
+  task_subject: string;
+  priority_level: string;
+  task_status: string;
+  last_checked_at: string | null;
+  next_run_at: string | null;
+};
+
+export type V2WatchRunItem = {
+  id: number;
+  task_id: string;
+  run_started_at: string | null;
+  run_status: string;
+  triggered_update: boolean;
+  diff_summary: string | null;
+};
+
+export type V2EventCenterData = {
+  events: V2EventStreamItem[];
+  hypotheses: V2HypothesisStreamItem[];
+  tasks: V2WatchTaskItem[];
+  runs: V2WatchRunItem[];
+};
