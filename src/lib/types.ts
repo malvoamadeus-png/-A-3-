@@ -118,9 +118,24 @@ export type V2WatchRunItem = {
   diff_summary: string | null;
 };
 
+export type PagedResult<T> = {
+  rows: T[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export type V2TradeabilityFilter =
+  | "focus"
+  | "all"
+  | "conditional_trade"
+  | "observe_only"
+  | "high_conviction_if_confirmed";
+
 export type V2EventCenterData = {
-  events: V2EventStreamItem[];
-  hypotheses: V2HypothesisStreamItem[];
+  events: PagedResult<V2EventStreamItem>;
+  hypotheses: PagedResult<V2HypothesisStreamItem>;
   mappings: V2StockMappingItem[];
   tasks: V2WatchTaskItem[];
   runs: V2WatchRunItem[];

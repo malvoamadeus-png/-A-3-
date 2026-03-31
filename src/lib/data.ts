@@ -9,6 +9,7 @@ import type {
   V2EventStreamItem,
   V2HypothesisStreamItem,
   V2StockMappingItem,
+  V2TradeabilityFilter,
   V2WatchRunItem,
   V2WatchTaskItem,
 } from "@/lib/types";
@@ -293,34 +294,59 @@ export async function getJin10NewsRows(params?: {
 }
 
 export async function getV2EventCenterData(params?: {
-  limit?: number;
+  hypothesisPage?: number;
+  hypothesisPageSize?: number;
+  eventPage?: number;
+  eventPageSize?: number;
+  tradeabilityFilter?: V2TradeabilityFilter;
 }): Promise<V2EventCenterData> {
   const supabase = getSupabaseServerClient();
-  const safeLimit = Math.max(1, Math.min(100, params?.limit ?? 20));
+  const safeHypothesisPageSize = Math.max(1, Math.min(100, params?.hypothesisPageSize ?? 20));
+  const safeEventPageSize = Math.max(1, Math.min(100, params?.eventPageSize ?? 20));
+  const safeHypothesisPage = Math.max(1, params?.hypothesisPage ?? 1);
+  const safeEventPage = Math.max(1, params?.eventPage ?? 1);
+  const tradeabilityFilter = params?.tradeabilityFilter ?? "focus";
+
+  const hypothesisFrom = (safeHypothesisPage - 1) * safeHypothesisPageSize;
+  const hypothesisTo = hypothesisFrom + safeHypothesisPageSize - 1;
+  const eventFrom = (safeEventPage - 1) * safeEventPageSize;
+  const eventTo = eventFrom + safeEventPageSize - 1;
+
+  let hypothesisQuery = supabase
+    .from("hypothesis_cards")
+    .select(
+      "hypothesis_id, event_id, created_at, hypothesis_title, thesis_summary, thesis_type, tradeability_level",
+      { count: "exact" }
+    )
+    .order("created_at", { ascending: false })
+    .range(hypothesisFrom, hypothesisTo);
+  if (tradeabilityFilter === "focus") {
+    hypothesisQuery = hypothesisQuery.neq("tradeability_level", "observe_only");
+  } else if (tradeabilityFilter !== "all") {
+    hypothesisQuery = hypothesisQuery.eq("tradeability_level", tradeabilityFilter);
+  }
 
   const [eventResp, hypoResp, taskResp, runResp] = await Promise.all([
     supabase
       .from("event_cards")
       .select(
-        "event_id, created_at, event_title, event_summary, event_status, rejection_reason, lifecycle_stage, theme_key, theme_delta, delta_reason, theme_state_snapshot"
+        "event_id, created_at, event_title, event_summary, event_status, rejection_reason, lifecycle_stage, theme_key, theme_delta, delta_reason, theme_state_snapshot",
+        { count: "exact" }
       )
+      .neq("event_status", "rejected")
       .order("created_at", { ascending: false })
-      .limit(safeLimit),
-    supabase
-      .from("hypothesis_cards")
-      .select("hypothesis_id, event_id, created_at, hypothesis_title, thesis_summary, thesis_type, tradeability_level")
-      .order("created_at", { ascending: false })
-      .limit(safeLimit),
+      .range(eventFrom, eventTo),
+    hypothesisQuery,
     supabase
       .from("watch_tasks")
       .select("task_id, event_id, hypothesis_id, task_type, task_subject, priority_level, task_status, last_checked_at, next_run_at")
       .order("updated_at", { ascending: false })
-      .limit(safeLimit),
+      .limit(20),
     supabase
       .from("watch_task_runs")
       .select("id, task_id, run_started_at, run_status, triggered_update, diff_summary")
       .order("run_started_at", { ascending: false })
-      .limit(safeLimit),
+      .limit(20),
   ]);
 
   if (eventResp.error) {
@@ -348,14 +374,14 @@ export async function getV2EventCenterData(params?: {
       )
       .in("hypothesis_id", hypothesisIds)
       .order("created_at", { ascending: false })
-      .limit(safeLimit * 6);
+      .limit(Math.max(60, safeHypothesisPageSize * 6));
     if (mappingResp.error) {
       throw new Error(`查询 stock_role_mappings 失败: ${mappingResp.error.message}`);
     }
     mappingRows = mappingResp.data ?? [];
   }
 
-  const events: V2EventStreamItem[] = (eventResp.data ?? []).map((item) => ({
+  const eventRows: V2EventStreamItem[] = (eventResp.data ?? []).map((item) => ({
     event_id: String(item.event_id),
     created_at: item.created_at ? String(item.created_at) : null,
     event_title: String(item.event_title ?? ""),
@@ -372,7 +398,7 @@ export async function getV2EventCenterData(params?: {
         : null,
   }));
 
-  const hypotheses: V2HypothesisStreamItem[] = (hypoResp.data ?? []).map((item) => ({
+  const hypothesisRows: V2HypothesisStreamItem[] = (hypoResp.data ?? []).map((item) => ({
     hypothesis_id: String(item.hypothesis_id),
     event_id: String(item.event_id),
     created_at: item.created_at ? String(item.created_at) : null,
@@ -421,5 +447,26 @@ export async function getV2EventCenterData(params?: {
     diff_summary: item.diff_summary ? String(item.diff_summary) : null,
   }));
 
-  return { events, hypotheses, mappings, tasks, runs };
+  const eventTotal = Number(eventResp.count ?? 0);
+  const hypothesisTotal = Number(hypoResp.count ?? 0);
+
+  return {
+    events: {
+      rows: eventRows,
+      total: eventTotal,
+      page: safeEventPage,
+      pageSize: safeEventPageSize,
+      totalPages: Math.max(1, Math.ceil(eventTotal / safeEventPageSize)),
+    },
+    hypotheses: {
+      rows: hypothesisRows,
+      total: hypothesisTotal,
+      page: safeHypothesisPage,
+      pageSize: safeHypothesisPageSize,
+      totalPages: Math.max(1, Math.ceil(hypothesisTotal / safeHypothesisPageSize)),
+    },
+    mappings,
+    tasks,
+    runs,
+  };
 }

@@ -1,8 +1,21 @@
+import Link from "next/link";
+
 import { getV2EventCenterData } from "@/lib/data";
-import type { V2StockMappingItem, V2WatchRunItem, V2WatchTaskItem } from "@/lib/types";
+import type {
+  V2StockMappingItem,
+  V2TradeabilityFilter,
+  V2WatchRunItem,
+  V2WatchTaskItem,
+} from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
+
+type SearchParams = Promise<{
+  tradeability?: string;
+  hypoPage?: string;
+  eventPage?: string;
+}>;
 
 const SHANGHAI_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
   timeZone: "Asia/Shanghai",
@@ -14,6 +27,38 @@ const SHANGHAI_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
   second: "2-digit",
   hour12: false,
 });
+
+const TRADEABILITY_OPTIONS: Array<{
+  value: V2TradeabilityFilter;
+  label: string;
+}> = [
+  { value: "focus", label: "交易优先" },
+  { value: "all", label: "全部" },
+  { value: "conditional_trade", label: "仅 conditional_trade" },
+  { value: "observe_only", label: "仅 observe_only" },
+  { value: "high_conviction_if_confirmed", label: "仅 high_conviction_if_confirmed" },
+];
+
+function normalizeTradeability(raw: string | undefined): V2TradeabilityFilter {
+  if (
+    raw === "all" ||
+    raw === "conditional_trade" ||
+    raw === "observe_only" ||
+    raw === "high_conviction_if_confirmed" ||
+    raw === "focus"
+  ) {
+    return raw;
+  }
+  return "focus";
+}
+
+function parsePositiveInt(raw: string | undefined, fallback: number): number {
+  const parsed = Number.parseInt(raw ?? "", 10);
+  if (Number.isNaN(parsed)) {
+    return fallback;
+  }
+  return Math.max(1, parsed);
+}
 
 function formatDisplayTime(raw: string | null): string {
   if (!raw) return "-";
@@ -73,12 +118,35 @@ function buildLatestRunByTask(rows: V2WatchRunItem[]): Map<string, V2WatchRunIte
   return map;
 }
 
-export default async function BriefsPage() {
-  const data = await getV2EventCenterData({ limit: 20 });
-  const eventById = new Map(data.events.map((row) => [row.event_id, row]));
+export default async function BriefsPage({ searchParams }: { searchParams: SearchParams }) {
+  const params = await searchParams;
+  const tradeability = normalizeTradeability(params.tradeability);
+  const hypothesisPage = parsePositiveInt(params.hypoPage, 1);
+  const eventPage = parsePositiveInt(params.eventPage, 1);
+
+  const data = await getV2EventCenterData({
+    hypothesisPage,
+    hypothesisPageSize: 20,
+    eventPage,
+    eventPageSize: 20,
+    tradeabilityFilter: tradeability,
+  });
+  const eventById = new Map(data.events.rows.map((row) => [row.event_id, row]));
   const mappingsByHypothesis = buildMappingsByHypothesis(data.mappings);
   const tasksByHypothesis = buildTasksByHypothesis(data.tasks);
   const latestRunByTask = buildLatestRunByTask(data.runs);
+
+  const buildBriefsHref = (patch: Partial<{
+    tradeability: V2TradeabilityFilter;
+    hypoPage: number;
+    eventPage: number;
+  }>): string => {
+    const search = new URLSearchParams();
+    search.set("tradeability", patch.tradeability ?? tradeability);
+    search.set("hypoPage", String(patch.hypoPage ?? data.hypotheses.page));
+    search.set("eventPage", String(patch.eventPage ?? data.events.page));
+    return `/briefs?${search.toString()}`;
+  };
 
   return (
     <div style={{ padding: "24px", maxWidth: 1400, margin: "0 auto" }}>
@@ -87,59 +155,43 @@ export default async function BriefsPage() {
           <div>
             <h1 style={{ fontSize: 28 }}>V2 事件中心</h1>
             <p style={{ color: "#666", marginTop: 6 }}>
-              事件、假设、选股理由、长期任务与执行记录的一体化视图（最近20条）
+              先看可交易假设，再看事件证据；支持 tradeability 分类筛选与双流独立分页
             </p>
           </div>
           <p style={{ color: "#666" }}>
-            事件 {data.events.length} / 假设 {data.hypotheses.length} / 选股 {data.mappings.length} / 任务 {data.tasks.length} / 执行{" "}
-            {data.runs.length}
+            假设 {data.hypotheses.rows.length}/{data.hypotheses.total} / 事件 {data.events.rows.length}/
+            {data.events.total} / 选股 {data.mappings.length} / 任务 {data.tasks.length} / 执行 {data.runs.length}
           </p>
         </section>
 
         <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
-          <h2 style={{ fontSize: 18, marginBottom: 8 }}>事件流（event_cards）</h2>
-          {data.events.length === 0 ? (
-            <div style={{ color: "#666" }}>暂无事件数据。</div>
-          ) : (
-            <div style={{ overflowX: "auto" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: "#f3f4f6" }}>
-                    <th style={{ textAlign: "left", padding: "8px 10px" }}>时间</th>
-                    <th style={{ textAlign: "left", padding: "8px 10px" }}>状态</th>
-                    <th style={{ textAlign: "left", padding: "8px 10px" }}>生命周期</th>
-                    <th style={{ textAlign: "left", padding: "8px 10px" }}>主题键</th>
-                    <th style={{ textAlign: "left", padding: "8px 10px" }}>主题快照</th>
-                    <th style={{ textAlign: "left", padding: "8px 10px" }}>事件标题</th>
-                    <th style={{ textAlign: "left", padding: "8px 10px" }}>补充信息</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {data.events.map((row) => (
-                    <tr key={row.event_id} style={{ borderTop: "1px solid #eee", verticalAlign: "top" }}>
-                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{formatDisplayTime(row.created_at)}</td>
-                      <td style={{ padding: "8px 10px" }}>{row.event_status}</td>
-                      <td style={{ padding: "8px 10px" }}>{row.lifecycle_stage}</td>
-                      <td style={{ padding: "8px 10px" }}>{row.theme_key ?? "-"}</td>
-                      <td style={{ padding: "8px 10px" }}>{prettyThemeState(row.theme_state_snapshot)}</td>
-                      <td style={{ padding: "8px 10px" }}>{row.event_title}</td>
-                      <td style={{ padding: "8px 10px", minWidth: 260 }}>
-                        {row.event_status === "rejected"
-                          ? (row.rejection_reason ?? "-")
-                          : (row.delta_reason ?? row.event_summary ?? "-")}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
           <h2 style={{ fontSize: 18, marginBottom: 8 }}>假设流（hypothesis_cards）</h2>
-          {data.hypotheses.length === 0 ? (
-            <div style={{ color: "#666" }}>暂无假设数据。</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 10 }}>
+            {TRADEABILITY_OPTIONS.map((option) => {
+              const active = tradeability === option.value;
+              return (
+                <Link
+                  key={option.value}
+                  href={buildBriefsHref({ tradeability: option.value, hypoPage: 1 })}
+                  style={{
+                    border: "1px solid",
+                    borderColor: active ? "#2563eb" : "#ddd",
+                    color: active ? "#2563eb" : "#444",
+                    borderRadius: 999,
+                    padding: "4px 10px",
+                    fontSize: 13,
+                    textDecoration: "none",
+                    background: active ? "#eff6ff" : "#fff",
+                  }}
+                >
+                  {option.label}
+                </Link>
+              );
+            })}
+          </div>
+
+          {data.hypotheses.rows.length === 0 ? (
+            <div style={{ color: "#666" }}>当前筛选下暂无假设数据。</div>
           ) : (
             <div style={{ overflowX: "auto" }}>
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
@@ -153,7 +205,7 @@ export default async function BriefsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {data.hypotheses.map((row) => {
+                  {data.hypotheses.rows.map((row) => {
                     const event = eventById.get(row.event_id);
                     const mappings = mappingsByHypothesis.get(row.hypothesis_id) ?? [];
                     const tasks = tasksByHypothesis.get(row.hypothesis_id) ?? [];
@@ -168,7 +220,7 @@ export default async function BriefsPage() {
                             <summary style={{ cursor: "pointer" }}>查看逻辑与任务</summary>
                             <div style={{ marginTop: 10, display: "grid", gap: 10 }}>
                               <div style={{ color: "#444" }}>
-                                <strong>事件：</strong>
+                                <strong>关联事件：</strong>
                                 {event?.event_title ?? "-"}
                               </div>
                               <div style={{ color: "#444" }}>
@@ -251,6 +303,86 @@ export default async function BriefsPage() {
               </table>
             </div>
           )}
+
+          <section style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
+            <span style={{ color: "#666", fontSize: 13 }}>
+              共 {data.hypotheses.total} 条，当前第 {data.hypotheses.page} / {data.hypotheses.totalPages} 页
+            </span>
+            <span style={{ color: "#999" }}>|</span>
+            {data.hypotheses.page > 1 ? (
+              <Link href={buildBriefsHref({ hypoPage: data.hypotheses.page - 1 })} style={{ color: "#2563eb" }}>
+                上一页
+              </Link>
+            ) : (
+              <span style={{ color: "#999" }}>上一页</span>
+            )}
+            <span style={{ color: "#999" }}>|</span>
+            {data.hypotheses.page < data.hypotheses.totalPages ? (
+              <Link href={buildBriefsHref({ hypoPage: data.hypotheses.page + 1 })} style={{ color: "#2563eb" }}>
+                下一页
+              </Link>
+            ) : (
+              <span style={{ color: "#999" }}>下一页</span>
+            )}
+          </section>
+        </section>
+
+        <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
+          <h2 style={{ fontSize: 18, marginBottom: 8 }}>事件流（event_cards）</h2>
+          {data.events.rows.length === 0 ? (
+            <div style={{ color: "#666" }}>暂无事件数据。</div>
+          ) : (
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#f3f4f6" }}>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>时间</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>状态</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>生命周期</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>主题键</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>主题快照</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>事件标题</th>
+                    <th style={{ textAlign: "left", padding: "8px 10px" }}>补充信息</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.events.rows.map((row) => (
+                    <tr key={row.event_id} style={{ borderTop: "1px solid #eee", verticalAlign: "top" }}>
+                      <td style={{ padding: "8px 10px", whiteSpace: "nowrap" }}>{formatDisplayTime(row.created_at)}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.event_status}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.lifecycle_stage}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.theme_key ?? "-"}</td>
+                      <td style={{ padding: "8px 10px" }}>{prettyThemeState(row.theme_state_snapshot)}</td>
+                      <td style={{ padding: "8px 10px" }}>{row.event_title}</td>
+                      <td style={{ padding: "8px 10px", minWidth: 260 }}>{row.delta_reason ?? row.event_summary ?? "-"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <section style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 10 }}>
+            <span style={{ color: "#666", fontSize: 13 }}>
+              共 {data.events.total} 条，当前第 {data.events.page} / {data.events.totalPages} 页
+            </span>
+            <span style={{ color: "#999" }}>|</span>
+            {data.events.page > 1 ? (
+              <Link href={buildBriefsHref({ eventPage: data.events.page - 1 })} style={{ color: "#2563eb" }}>
+                上一页
+              </Link>
+            ) : (
+              <span style={{ color: "#999" }}>上一页</span>
+            )}
+            <span style={{ color: "#999" }}>|</span>
+            {data.events.page < data.events.totalPages ? (
+              <Link href={buildBriefsHref({ eventPage: data.events.page + 1 })} style={{ color: "#2563eb" }}>
+                下一页
+              </Link>
+            ) : (
+              <span style={{ color: "#999" }}>下一页</span>
+            )}
+          </section>
         </section>
 
         <section style={{ border: "1px solid #ddd", borderRadius: 8, padding: 12 }}>
