@@ -1,9 +1,27 @@
 import { getV2EventCenterData } from "@/lib/data";
 import type { V2StockMappingItem, V2WatchRunItem, V2WatchTaskItem } from "@/lib/types";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
+const SHANGHAI_TIME_FORMATTER = new Intl.DateTimeFormat("zh-CN", {
+  timeZone: "Asia/Shanghai",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hour12: false,
+});
+
 function formatDisplayTime(raw: string | null): string {
   if (!raw) return "-";
-  return raw.replace("T", " ").slice(0, 19);
+  const dt = new Date(raw);
+  if (Number.isNaN(dt.getTime())) {
+    return raw.replace("T", " ").slice(0, 19);
+  }
+  return SHANGHAI_TIME_FORMATTER.format(dt).replace(/\//g, "-");
 }
 
 function prettyThemeState(raw: Record<string, unknown> | null): string {

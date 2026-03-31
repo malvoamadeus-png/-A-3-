@@ -35,7 +35,7 @@ function formatDisplayTime(raw: string | null): string {
 
 export default async function Jin10Page({ searchParams }: { searchParams: SearchParams }) {
   const params = await searchParams;
-  const importanceRaw = (params.importance ?? "all").trim();
+  const importanceRaw = (params.importance ?? "1").trim();
   const importance = importanceRaw === "1" ? 1 : importanceRaw === "0" ? 0 : null;
   const pageRaw = Number.parseInt(params.page ?? "1", 10);
   const page = Number.isNaN(pageRaw) ? 1 : Math.max(1, pageRaw);
